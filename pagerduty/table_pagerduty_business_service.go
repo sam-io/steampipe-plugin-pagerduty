@@ -67,13 +67,13 @@ func tablePagerDutyBusinessService(_ context.Context) *plugin.Table {
 				Description: "Reference to the team that owns the business service.",
 				Type:        proto.ColumnType_JSON,
 			},
-			{
+			/*{
 				Name:        "dependencies",
 				Description: "Immediate dependencies of the business service.",
 				Type:        proto.ColumnType_JSON,
 				Hydrate:     hydrateBusinessServiceDependencies,
 				Transform:   transform.FromValue(),
-			},
+			},*/
 
 			// Steampipe standard columns
 			{

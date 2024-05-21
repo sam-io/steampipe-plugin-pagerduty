@@ -80,6 +80,11 @@ func tablePagerDutyIncident(_ context.Context) *plugin.Table {
 				Type:        proto.ColumnType_TIMESTAMP,
 			},
 			{
+				Name:        "resolved_at",
+				Description: "The date/time the incident was resolved.",
+				Type:        proto.ColumnType_TIMESTAMP,
+			},
+			{
 				Name:        "description",
 				Description: "The description of the incident.",
 				Type:        proto.ColumnType_STRING,
@@ -181,25 +186,30 @@ func tablePagerDutyIncident(_ context.Context) *plugin.Table {
 				Type:        proto.ColumnType_JSON,
 			},
 			{
+				Name:        "incident_responders",
+				Description: "The teams involved in the incident's lifecycle.",
+				Type:        proto.ColumnType_JSON,
+			},
+			{
 				Name:        "service_id",
 				Description: "The service id.",
 				Type:        proto.ColumnType_STRING,
 				Transform:   transform.FromField("Service.ID"),
-			},
-			{
-				Name:        "custom_fields",
-				Description: "Custom fields for the incident.",
-				Type:        proto.ColumnType_JSON,
-				Transform:   transform.FromValue(),
-				Hydrate:     hydrateCustomFields,
-			},
-			{
-				Name:        "impacted_business_services",
-				Description: "List of Business Services that are being impacted by the given incident.",
-				Type:        proto.ColumnType_JSON,
-				Transform:   transform.FromValue(),
-				Hydrate:     hydrateImpactedBusinessServices,
-			},
+			}, /*
+				{
+					Name:        "custom_fields",
+					Description: "Custom fields for the incident.",
+					Type:        proto.ColumnType_JSON,
+					Transform:   transform.FromValue(),
+					Hydrate:     hydrateCustomFields,
+				},
+				{
+					Name:        "impacted_business_services",
+					Description: "List of Business Services that are being impacted by the given incident.",
+					Type:        proto.ColumnType_JSON,
+					Transform:   transform.FromValue(),
+					Hydrate:     hydrateImpactedBusinessServices,
+				},*/
 
 			// Steampipe standard columns
 			{
@@ -271,6 +281,7 @@ func listPagerDutyIncidents(ctx context.Context, d *plugin.QueryData, h *plugin.
 		for _, q := range quals["service_id"].Quals {
 			if q.Operator == "=" {
 				req.ServiceIDs = append(req.ServiceIDs, q.Value.GetStringValue())
+				plugin.Logger(ctx).Trace("pagerduty_incident.listPagerDutyIncidents(ServiceIDs)", q.Value.GetStringValue())
 			}
 		}
 	}
@@ -285,6 +296,7 @@ func listPagerDutyIncidents(ctx context.Context, d *plugin.QueryData, h *plugin.
 			maxResult = uint(*limit)
 		}
 	}
+	req.Offset = 0
 	req.Limit = maxResult
 
 	listPage := func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
@@ -308,11 +320,12 @@ func listPagerDutyIncidents(ctx context.Context, d *plugin.QueryData, h *plugin.
 			}
 		}
 
-		if !listResponse.APIListObject.More {
+		if !listResponse.More {
 			break
 		}
 
-		req.Offset = listResponse.APIListObject.Offset + listResponse.APIListObject.Limit
+		req.Offset = listResponse.Offset + listResponse.Limit
+		plugin.Logger(ctx).Trace("pagerduty_incident.listPagerDutyIncidents", "offset", req.Offset)
 	}
 
 	return nil, nil
@@ -354,21 +367,6 @@ func getPagerDutyIncident(ctx context.Context, d *plugin.QueryData, h *plugin.Hy
 
 func convertTimeString(t time.Time) string {
 	return t.Format(time.RFC3339)
-}
-
-func hydrateCustomFields(ctx context.Context, queryData *plugin.QueryData, hydrateData *plugin.HydrateData) (interface{}, error) {
-	client, err := getSessionConfig(ctx, queryData)
-	if err != nil {
-		plugin.Logger(ctx).Error("pagerduty_incident.HydrateCustomFields", "connection_error", err)
-		return nil, err
-	}
-
-	resp, err := client.GetIncidentCustomFields(ctx, hydrateData.Item.(pagerduty.Incident).ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp["custom_fields"], nil
 }
 
 func hydrateImpactedBusinessServices(ctx context.Context, queryData *plugin.QueryData, hydrateData *plugin.HydrateData) (interface{}, error) {

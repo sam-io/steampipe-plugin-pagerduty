@@ -132,13 +132,6 @@ func tablePagerDutyService(_ context.Context) *plugin.Table {
 				Description: "The set of teams associated with this service.",
 				Type:        proto.ColumnType_JSON,
 			},
-			{
-				Name:        "dependencies",
-				Description: "Immediate dependencies of the service.",
-				Type:        proto.ColumnType_JSON,
-				Hydrate:     hydrateServiceDependencies,
-				Transform:   transform.FromValue(),
-			},
 
 			// Steampipe standard columns
 			{
@@ -248,19 +241,4 @@ func buildServiceRequestFields(ctx context.Context, queryColumns []string) []str
 		}
 	}
 	return fields
-}
-
-func hydrateServiceDependencies(ctx context.Context, queryData *plugin.QueryData, hydrateData *plugin.HydrateData) (interface{}, error) {
-	client, err := getSessionConfig(ctx, queryData)
-	if err != nil {
-		plugin.Logger(ctx).Error("pagerduty_service.HydrateCustomFields", "connection_error", err)
-		return nil, err
-	}
-
-	resp, err := client.GetServiceDependencies(ctx, hydrateData.Item.(pagerduty.Service).ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp["relationships"], nil
 }
