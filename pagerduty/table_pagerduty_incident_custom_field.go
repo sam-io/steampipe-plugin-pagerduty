@@ -2,6 +2,8 @@ package pagerduty
 
 import (
 	"context"
+	"encoding/json"
+
 	"github.com/turbot/steampipe-plugin-sdk/v5/grpc/proto"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin/transform"
@@ -68,8 +70,25 @@ func tablePagerDutyIncidentCustomField(_ context.Context) *plugin.Table {
 			{
 				Name:        "value",
 				Description: "Valuer of the field.",
-				Type:        proto.ColumnType_STRING,
-				Transform:   transform.FromField("value"),
+				Type:        proto.ColumnType_JSON,
+				Transform: transform.From(func(c context.Context, d *transform.TransformData) (interface{}, error) {
+					val := d.HydrateItem.(map[string]interface{})["value"]
+					if val == nil {
+						return nil, nil
+					}
+
+					stringVal, ok := val.(string)
+					if ok {
+						b, err := json.Marshal(stringVal)
+						if err != nil {
+							return nil, err
+						}
+
+						return string(b), nil
+					}
+
+					return val, nil
+				}),
 			},
 
 			// Steampipe standard columns
