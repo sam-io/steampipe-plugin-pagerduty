@@ -2,7 +2,6 @@ package pagerduty
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/turbot/steampipe-plugin-sdk/v5/grpc/proto"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin"
@@ -27,7 +26,7 @@ func tablePagerDutyIncidentCustomField(_ context.Context) *plugin.Table {
 		Columns: []*plugin.Column{
 			{
 				Name:        "id",
-				Description: "An unique identifier of the log entry.",
+				Description: "An unique identifier of the field.",
 				Type:        proto.ColumnType_STRING,
 				Transform:   transform.FromField("id"),
 			},
@@ -70,25 +69,8 @@ func tablePagerDutyIncidentCustomField(_ context.Context) *plugin.Table {
 			{
 				Name:        "value",
 				Description: "Valuer of the field.",
-				Type:        proto.ColumnType_JSON,
-				Transform: transform.From(func(c context.Context, d *transform.TransformData) (interface{}, error) {
-					val := d.HydrateItem.(map[string]interface{})["value"]
-					if val == nil {
-						return nil, nil
-					}
-
-					stringVal, ok := val.(string)
-					if ok {
-						b, err := json.Marshal(stringVal)
-						if err != nil {
-							return nil, err
-						}
-
-						return string(b), nil
-					}
-
-					return val, nil
-				}),
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("value"),
 			},
 
 			// Steampipe standard columns
@@ -113,15 +95,38 @@ func listPagerDutyIncidentCustomFields(ctx context.Context, queryData *plugin.Qu
 
 	incidentID := queryData.EqualsQuals["incident_id"].GetStringValue()
 
-	plugin.Logger(ctx).Trace("pagerduty_incident_custom_fields.listPagerDutyIncidentCustomFields", incidentID)
-
 	resp, err := client.GetIncidentCustomFields(ctx, incidentID)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, sd := range (resp["custom_fields"]).([]interface{}) {
-		queryData.StreamListItem(ctx, sd)
+	customField, ok := resp["custom_fields"].([]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	for _, cf := range customField {
+		field, isField := cf.(map[string]interface{})
+		if !isField {
+			queryData.StreamListItem(ctx, cf)
+			continue
+		}
+
+		multiValue, isMultiValue := field["value"].([]interface{})
+		if !isMultiValue {
+			queryData.StreamListItem(ctx, cf)
+			continue
+		}
+
+		for _, v := range multiValue {
+			newField := make(map[string]interface{})
+			for k, v := range field {
+				newField[k] = v
+			}
+
+			newField["value"] = v
+			queryData.StreamListItem(ctx, newField)
+		}
 	}
 
 	return nil, nil
